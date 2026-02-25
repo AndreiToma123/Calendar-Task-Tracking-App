@@ -100,7 +100,7 @@ export const Login: React.FC = () => {
                             <input
                                 type="text"
                                 value={username}
-                                onChange={(e) => setUsername(e.target.value)}
+                                onChange={(e) => setUsername(e.target.value.toLowerCase())}
                                 className="login-input"
                                 placeholder="e.g. admin"
                                 required
