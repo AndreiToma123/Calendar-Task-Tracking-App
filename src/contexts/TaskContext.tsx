@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import type { Task, TasksByDate, Priority, DayStats } from '../types';
+import { supabase } from '../lib/supabase';
+import { useAuth } from './AuthContext';
 
 interface TaskContextType {
     tasks: TasksByDate;
@@ -20,30 +22,69 @@ const POINTS: Record<Priority, number> = {
 };
 
 export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [tasks, setTasks] = useState<TasksByDate>(() => {
-        const saved = localStorage.getItem('tasks');
-        return saved ? JSON.parse(saved) : {};
-    });
+    const { user } = useAuth();
+    const [tasks, setTasks] = useState<TasksByDate>({});
 
     useEffect(() => {
-        localStorage.setItem('tasks', JSON.stringify(tasks));
-    }, [tasks]);
+        if (!user) return;
 
-    const addTask = (date: string, title: string, priority: Priority) => {
-        const newTask: Task = {
-            id: crypto.randomUUID(),
-            title,
-            priority,
-            completed: false,
+        const fetchTasks = async () => {
+            const { data, error } = await supabase
+                .from('tasks')
+                .select('*')
+                .eq('user_id', user.id);
+
+            if (error) {
+                console.error('Error fetching tasks:', error);
+                return;
+            }
+
+            const groupedTasks: TasksByDate = {};
+            data.forEach((row) => {
+                if (!groupedTasks[row.date]) groupedTasks[row.date] = [];
+                groupedTasks[row.date].push({
+                    id: row.id,
+                    title: row.title,
+                    priority: row.priority as Priority,
+                    completed: row.completed,
+                });
+            });
+
+            setTasks(groupedTasks);
         };
+
+        fetchTasks();
+    }, [user]);
+
+    const addTask = async (date: string, title: string, priority: Priority) => {
+        if (!user) return;
+
+        const fakeId = crypto.randomUUID();
+        const newTask: Task = { id: fakeId, title, priority, completed: false };
 
         setTasks((prev) => ({
             ...prev,
             [date]: [...(prev[date] || []), newTask],
         }));
+
+        const { data, error } = await supabase
+            .from('tasks')
+            .insert([{ user_id: user.id, date, title, priority, completed: false }])
+            .select()
+            .single();
+
+        if (error) {
+            console.error('Error adding task:', error);
+            return;
+        }
+
+        setTasks((prev) => ({
+            ...prev,
+            [date]: prev[date].map((t) => (t.id === fakeId ? { ...t, id: data.id } : t)),
+        }));
     };
 
-    const toggleTask = (date: string, taskId: string) => {
+    const toggleTask = async (date: string, taskId: string) => {
         setTasks((prev) => {
             const dayTasks = prev[date] || [];
             return {
@@ -53,9 +94,19 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 ),
             };
         });
+
+        const task = tasks[date]?.find((t) => t.id === taskId);
+        if (!task) return;
+
+        const { error } = await supabase
+            .from('tasks')
+            .update({ completed: !task.completed })
+            .eq('id', taskId);
+
+        if (error) console.error('Error toggling task:', error);
     };
 
-    const deleteTask = (date: string, taskId: string) => {
+    const deleteTask = async (date: string, taskId: string) => {
         setTasks((prev) => {
             const dayTasks = prev[date] || [];
             return {
@@ -63,9 +114,13 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 [date]: dayTasks.filter((t) => t.id !== taskId),
             };
         });
+
+        const { error } = await supabase.from('tasks').delete().eq('id', taskId);
+
+        if (error) console.error('Error deleting task:', error);
     };
 
-    const editTask = (date: string, taskId: string, newTitle: string, newPriority: Priority) => {
+    const editTask = async (date: string, taskId: string, newTitle: string, newPriority: Priority) => {
         setTasks((prev) => {
             const dayTasks = prev[date] || [];
             return {
@@ -75,21 +130,33 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 ),
             };
         });
+
+        const { error } = await supabase
+            .from('tasks')
+            .update({ title: newTitle, priority: newPriority })
+            .eq('id', taskId);
+
+        if (error) console.error('Error editing task:', error);
     };
 
-    const moveTask = (taskId: string, fromDate: string, toDate: string) => {
-        setTasks((prev) => {
-            const fromTasks = prev[fromDate] || [];
-            const taskToMove = fromTasks.find((t) => t.id === taskId);
-            
-            if (!taskToMove) return prev;
+    const moveTask = async (taskId: string, fromDate: string, toDate: string) => {
+        const fromTasks = tasks[fromDate] || [];
+        const taskToMove = fromTasks.find((t) => t.id === taskId);
 
-            return {
-                ...prev,
-                [fromDate]: fromTasks.filter((t) => t.id !== taskId),
-                [toDate]: [...(prev[toDate] || []), taskToMove],
-            };
-        });
+        if (!taskToMove) return;
+
+        setTasks((prev) => ({
+            ...prev,
+            [fromDate]: prev[fromDate].filter((t) => t.id !== taskId),
+            [toDate]: [...(prev[toDate] || []), taskToMove],
+        }));
+
+        const { error } = await supabase
+            .from('tasks')
+            .update({ date: toDate })
+            .eq('id', taskId);
+
+        if (error) console.error('Error moving task:', error);
     };
 
     const getDayStats = (date: string): DayStats => {
@@ -112,7 +179,9 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     return (
-        <TaskContext.Provider value={{ tasks, addTask, toggleTask, deleteTask, editTask, moveTask, getDayStats }}>
+        <TaskContext.Provider
+            value={{ tasks, addTask, toggleTask, deleteTask, editTask, moveTask, getDayStats }}
+        >
             {children}
         </TaskContext.Provider>
     );
