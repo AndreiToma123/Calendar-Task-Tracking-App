@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { Lock, User as UserIcon, Loader2, Calendar } from 'lucide-react';
+import { Lock, Mail, Loader2, Calendar } from 'lucide-react';
 
 export const Login: React.FC = () => {
     const [isRegistering, setIsRegistering] = useState(false);
-    const [username, setUsername] = useState('');
+    const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -16,13 +16,10 @@ export const Login: React.FC = () => {
         setError(null);
         setSuccessMsg(null);
 
-        // Supabase requires an email under the hood, so we generate a consistent fake one
-        const fakeEmail = `${username.toLowerCase().replace(/[^a-z0-9]/g, '')}@taskflow.auth.com`;
-
         try {
             if (isRegistering) {
                 const { error } = await supabase.auth.signUp({
-                    email: fakeEmail,
+                    email,
                     password,
                 });
 
@@ -31,7 +28,7 @@ export const Login: React.FC = () => {
                 setIsRegistering(false);
             } else {
                 const { error } = await supabase.auth.signInWithPassword({
-                    email: fakeEmail,
+                    email,
                     password,
                 });
                 if (error) throw error;
@@ -91,18 +88,18 @@ export const Login: React.FC = () => {
                 <form onSubmit={handleSubmit}>
                     <div className="login-form-group">
                         <label className="login-label">
-                            Username
+                            Email Address
                         </label>
                         <div className="login-input-wrapper">
                             <div className="login-input-icon">
-                                <UserIcon size={18} />
+                                <Mail size={18} />
                             </div>
                             <input
-                                type="text"
-                                value={username}
-                                onChange={(e) => setUsername(e.target.value.toLowerCase())}
+                                type="email"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
                                 className="login-input"
-                                placeholder="e.g. admin"
+                                placeholder="e.g. you@example.com"
                                 required
                             />
                         </div>
