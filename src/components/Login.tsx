@@ -17,7 +17,7 @@ export const Login: React.FC = () => {
         setSuccessMsg(null);
 
         // Supabase requires an email under the hood, so we generate a consistent fake one
-        const fakeEmail = `${username.toLowerCase().replace(/[^a-z0-9]/g, '')}@taskflow.local`;
+        const fakeEmail = `${username.toLowerCase().replace(/[^a-z0-9]/g, '')}@taskflow.auth.com`;
 
         try {
             if (isRegistering) {
